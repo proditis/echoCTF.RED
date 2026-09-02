@@ -1,11 +1,11 @@
-#!/usr/local/bin/python3
+#!/usr/bin/env python3
 #
-# pip install requests
+# pip install requests inotify_simple
 #
 import argparse
 import os
-import select
 import requests
+from inotify_simple import INotify, flags
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file_path", required=True, help="Full path to the file to monitor")
@@ -18,21 +18,15 @@ FOLDER = os.path.dirname(FULL_PATH)
 URL = args.url
 BEARER_TOKEN = args.token
 
-fd = os.open(FOLDER, os.O_RDONLY)
-kq = select.kqueue()
-
-watch = select.kevent(
-    fd,
-    filter=select.KQ_FILTER_VNODE,
-    flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
-    fflags=select.KQ_NOTE_WRITE
-)
+inotify = INotify()
+watch_flags = flags.CREATE | flags.CLOSE_WRITE | flags.MOVED_TO
+inotify.add_watch(FOLDER, watch_flags)
 
 print(f"Watching for {FULL_PATH} ...")
 
 try:
     while True:
-        events = kq.control([watch], 1)
+        events = inotify.read()
         if events and os.path.exists(FULL_PATH):
             response = requests.post(
                 URL,
@@ -46,5 +40,4 @@ try:
             print(f"Posted {FULL_PATH}, status: {response.status_code}")
             break
 finally:
-    kq.close()
-    os.close(fd)
+    inotify.close()
