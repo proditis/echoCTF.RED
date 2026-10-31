@@ -104,8 +104,9 @@ class ImprovementWidget extends Widget
   protected function pace(int $player_id): array
   {
     $longest = intval(max(array_column(self::$periods, 1))) * 2;
-    // the median timer of each target the player solved, over all its
-    // headshots that have a timer (moderators can zero timers out)
+    // the median timer of each target the player solved, over the other
+    // players' headshots that have a timer (moderators can zero timers out,
+    // and the player's own solves should not drag their own reference)
     $rows = Yii::$app->db->createCommand(<<<SQL
 SELECT UNIX_TIMESTAMP(h.created_at) AS at, m.target_median / NULLIF(h.timer, 0) AS pace
 FROM headshot h
@@ -115,6 +116,7 @@ JOIN (
          COUNT(*) OVER (PARTITION BY target_id) AS target_solves
   FROM headshot
   WHERE timer > 0
+    AND player_id <> :p3
     AND target_id IN (SELECT target_id FROM headshot WHERE player_id=:p1)
 ) m ON m.target_id=h.target_id
 WHERE h.player_id=:p2
@@ -122,7 +124,7 @@ WHERE h.player_id=:p2
   AND m.target_solves >= :min_solves
   AND h.timer > 0
   AND NOT EXISTS (SELECT 1 FROM player_target_help pth WHERE pth.player_id=h.player_id AND pth.target_id=h.target_id)
-SQL, [':p1' => $player_id, ':p2' => $player_id, ':min_solves' => self::MIN_TARGET_SOLVES])->queryAll();
+SQL, [':p1' => $player_id, ':p2' => $player_id, ':p3' => $player_id, ':min_solves' => self::MIN_TARGET_SOLVES])->queryAll();
 
     $now = time();
     $result = [];
